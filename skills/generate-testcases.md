@@ -5,8 +5,104 @@ Generate comprehensive test cases from PRD (Product Requirement Document) follow
 
 ## Prerequisites
 - Access to PRD document (Lark wiki, Confluence, etc.)
-- TestRail API access (optional, for fetching existing test cases)
-- Understanding of the feature requirements
+- TestRail account with access to existing test cases
+- Lark account with permission to create/edit spreadsheets (via Lark MCP)
+
+---
+
+## Standard Prompt Template (Use This First)
+
+This is the primary prompt template to kick off test case generation. Fill in the variables before sending to the AI agent.
+
+```
+Hello, I am a Software Quality Assurance Engineer currently working on a product called {$productName}.
+Based on the Product Requirement Document (PRD) located at {$prdLink}, I want to generate test cases
+covering all possible scenarios derived from the provided PRD.
+
+You can refer to the existing test cases from this TestRail link: {$testrailLink}
+Learn about the pattern, the components that need to be tested, the steps, title format, and expected result style.
+Also consider which existing test cases are still relevant and should be included or referenced in the newly generated test cases for this feature.
+
+The test cases should include the following types: Positive, Negative, Edge, Security, and Performance.
+
+The test cases should cover: {choose one or more: Functional | API | Visual}
+
+Generate test case scenarios relevant to the target platform: {choose one or more: Mobile | Website},
+ensuring alignment with the end-user experience.
+
+Export the results directly into the Lark Spreadsheet at {$spreadsheetLink} with the following columns:
+Test Case Id, Title, Section, Automation Type, Estimate, Priority, Preconditions, Steps (Text), Expected Result, Type
+
+Apply the following default values:
+- Test Case Id: format TC-001, TC-002, and so on
+- Automation Type: Manual
+- Section: grouped by feature or module name
+- Estimate: in minutes; use 5 minutes as default if no reference is available
+- Priority: Critical / High / Medium / Low
+- Type: Positive / Negative / Edge / Security / Performance
+
+Steps should be written as a numbered list, one action per line.
+Generate all test cases in English.
+```
+
+### Variables to Fill In
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{$productName}` | Name of the product or feature being tested | `Traveloka Attractions PDP` |
+| `{$prdLink}` | URL to the PRD document (Lark, Confluence, etc.) | `https://traveloka.sg.larksuite.com/wiki/XXX` |
+| `{$testrailLink}` | TestRail URL of the existing test suite/section to reference | `https://traveloka.testrail.net/index.php?/suites/view/7&group_id=267` |
+| `{$spreadsheetLink}` | URL of the existing Lark Spreadsheet to write into, or leave empty to create a new one | `https://traveloka.sg.larksuite.com/sheets/XXX` |
+
+### Coverage Options
+
+| Option | When to Use |
+|--------|-------------|
+| **Functional** | Core business logic, happy/unhappy paths, validations |
+| **API** | Backend endpoints, request/response, error codes |
+| **Visual** | UI design, Figma compliance, layout, typography |
+
+### Platform Options
+
+| Option | When to Use |
+|--------|-------------|
+| **Mobile** | iOS / Android native or mobile web |
+| **Website** | Desktop or responsive web (includes MWEB) |
+
+### Output Columns Explained
+
+| Column | Description | Default |
+|--------|-------------|---------|
+| Test Case Id | Unique identifier | TC-001, TC-002, ... |
+| Title | Short descriptive name of the test | — |
+| Section | Feature or module grouping | Grouped by feature name |
+| Automation Type | Manual or Automated | Manual |
+| Estimate | Time to execute in minutes | 5 min |
+| Priority | Criticality level | Critical / High / Medium / Low |
+| Preconditions | Setup required before execution | — |
+| Steps (Text) | Numbered steps, one action per line | — |
+| Expected Result | What should happen after steps | — |
+| Type | Test case category | Positive / Negative / Edge / Security / Performance |
+
+### Test Type Definitions
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **Positive** | Valid input, expected happy path | "User selects a valid ticket and proceeds to checkout" |
+| **Negative** | Invalid input, error scenarios | "User submits form with empty required fields" |
+| **Edge** | Boundary conditions, rare states | "0 tickets available", "max 999 quantity" |
+| **Security** | Auth, injection, data exposure | "Unauthenticated user cannot access booking" |
+| **Performance** | Speed, load, responsiveness | "Page loads within 2s with 100+ items" |
+
+### How AI Should Execute This Prompt
+
+1. **Read PRD** — fetch from `{$prdLink}`, extract features, user stories, acceptance criteria
+2. **Read existing TestRail cases** — fetch from `{$testrailLink}`, learn title patterns, components, step style, expected result format
+3. **Identify test scope** — determine which features need Functional / API / Visual coverage
+4. **Determine platform** — Mobile, Website, or both
+5. **Generate test cases** — per feature/module, covering all 5 types (Positive, Negative, Edge, Security, Performance)
+6. **Apply defaults** — TC-001 IDs, Manual type, 5 min estimate, sections grouped by feature
+7. **Export to Lark Spreadsheet** — create or write into `{$spreadsheetLink}` using `lark_sheets_v3_spreadsheet_create` and Lark Sheets MCP tools
 
 ---
 
@@ -14,13 +110,11 @@ Generate comprehensive test cases from PRD (Product Requirement Document) follow
 
 ### Using Lark (if PRD is on Lark wiki)
 ```bash
-# Use OpenCode's Lark integration
-# Prompt: "Read this PRD document: https://traveloka.sg.larksuite.com/wiki/XXX"
-```
+# Step 1: Get node info from wiki token (last part of URL)
+lark_wiki_v2_space_getNode '{"token": "WIKI_TOKEN", "obj_type": "wiki"}'
 
-### Using Direct Fetch (if public URL)
-```bash
-curl -s "PRD_URL" | jq .
+# Step 2: Get raw document content using obj_token from response
+lark_docx_v1_document_rawContent '{"document_id": "OBJ_TOKEN", "query": {"lang": 0}}'
 ```
 
 ### Manual Input
@@ -32,147 +126,201 @@ Copy-paste key PRD sections:
 
 ---
 
-## Step 2: Read Existing Test Cases (Optional)
+## Step 2: Read Existing Test Cases from TestRail URL
 
-### From TestRail
+### Parse the TestRail URL
+
+Given a TestRail URL like:
+```
+https://traveloka.testrail.net/index.php?/suites/view/7&group_by=cases:section_id&group_order=asc&display=subtree&group_id=267
+```
+
+Extract the following values:
+
+| Parameter | Where to Find | Example |
+|-----------|--------------|---------|
+| `suite_id` | `/suites/view/{suite_id}` | `7` |
+| `section_id` | `group_id={section_id}` | `267` |
+
+> **Note:** `project_id` is not directly in the URL. Use `getSuites` to list all suites — the `project_id` is returned in each suite object.
+
+---
+
+### Step-by-Step: Fetch Data from TestRail URL
+
+#### 1. Source the CLI script
 ```bash
-source testrail.sh
-
-# Get existing test cases for reference
-getCases 7 2751 86977  # Product Detail section
-getCases 7 2751 86997  # Ticket List section
+source ~/testrail-cli/testrail.sh
 ```
 
-### Analyze Existing Coverage
-```
-Review existing test cases, identify:
-- Gaps in coverage
-- Missing edge cases
-- Design validation needs
-- E2E flow coverage
+#### 2. Find the project_id from the suite_id
+```bash
+# List all suites and find "project_id" in the matching suite object
+getSuites 7
 ```
 
----
+#### 3. Get all sections to understand the hierarchy
+```bash
+# getSections <project_id> <suite_id>
+getSections 7 7
 
-## Step 3: Generate Test Cases by Feature
-
-### Use This Prompt Template
+# Filter to find your target section by group_id
+getSections 7 7 | jq '.sections[] | select(.id == 267)'
 ```
-As a senior QA engineer, generate comprehensive test cases for [FEATURE_NAME] with format:
 
-Columns: Section | Case | Title | Precondition | Steps | Expected Result
+#### 4. Fetch test cases for the section (group_id)
+```bash
+# getCases <project_id> <suite_id> <section_id>
+getCases 7 7 267
+```
 
-Include test cases for:
-1. Logic (happy path, validation)
-2. UI Behavior (design validation per Figma)
-3. User Interaction (click, scroll, swipe, hover)
-4. State Management (persistence, reset, back button)
-5. E2E Flow (complete user journey)
-6. Edge Cases (0 items, sold out, special characters)
-7. Localization (non-English locale)
-8. Error Handling (API errors, network issues)
-9. Responsive (different viewports, if applicable)
+#### 5. Fetch test cases for all subsections
+```bash
+# List all child sections under the group_id
+getSections 7 7 | jq -r '.sections[] | select(.parent_id == 267) | "\(.id) \(.name)"'
 
-Reference PRD feature: [PASTE_FEATURE_DETAILS_HERE]
+# Loop through each subsection
+for section_id in 267 71696 73360 35511 44431; do
+  echo "=== Section $section_id ==="
+  getCases 7 7 $section_id | jq -r '.cases[] | "\(.id) | \(.title)"'
+done
 ```
 
 ---
 
-## Step 4: Format Output for Google Sheets
+### Full Example: Read from TestRail URL
 
-### Markdown Table Format (Easy Copy-Paste)
+**URL:**
 ```
-| Section | Case | Title | Precondition | Steps | Expected Result |
-|---------|------|-------|--------------|-------|-----------------|
-| Feature Name | Logic | Test case title | Precondition here | 1. Step 1<br>2. Step 2 | Expected result here |
+https://traveloka.testrail.net/index.php?/suites/view/7&group_id=267
+```
+
+**Execute:**
+```bash
+source ~/testrail-cli/testrail.sh
+
+# Confirm project_id
+getSuites 7 | jq '.suites[] | select(.id == 7) | {id, name, project_id}'
+
+# Get section info
+getSections 7 7 | jq '.sections[] | select(.id == 267) | {id, name, parent_id}'
+
+# Get test cases
+getCases 7 7 267 | jq -r '.cases[] | "\(.id) | \(.title)"'
+
+# Count total
+getCases 7 7 267 | jq '.cases | length'
+```
+
+---
+
+### What to Learn from Existing Test Cases
+```
+Review existing test cases and identify:
+- Naming/title pattern (e.g. "[version] Title describes scenario")
+- Components being tested (calendar, stepper, CTA, price, etc.)
+- Step writing style (imperative, numbered, one action per line)
+- Expected result format (assertion-based, descriptive)
+- Gaps in coverage — what's missing
+- Which existing cases are still relevant to the new feature
+```
+
+---
+
+## Step 3: Format Output for Lark Spreadsheet
+
+### Column Format
+```
+| Test Case Id | Title | Section | Automation Type | Estimate | Priority | Preconditions | Steps (Text) | Expected Result | Type |
+|--------------|-------|---------|-----------------|----------|----------|---------------|--------------|-----------------|------|
+| TC-001 | Verify [feature] displays correctly | Feature Name | Manual | 5 | High | 1. User is on page | 1. Open page<br>2. Observe feature | Feature renders correctly | Positive |
+| TC-002 | Verify error shown on invalid input | Feature Name | Manual | 5 | Medium | 1. User is on page | 1. Enter invalid data<br>2. Submit form | Error message displayed | Negative |
 ```
 
 **Key Formatting Rules:**
-- Use `<br>` for line breaks in Steps column (Google Sheets will interpret as new lines)
-- No `<br>` tags in other columns
-- Keep it concise for easy copy-paste
+- Test Case Id must be sequential: TC-001, TC-002, TC-003...
+- Steps must be numbered, one action per line
+- Use `\n` for line breaks inside Steps and Preconditions when writing to Lark Sheets cells
+- Keep Title and Expected Result as plain single-line text
 
 ---
 
-## Step 5: Review & Improve
+## Step 4: Export to Lark Spreadsheet
 
-### Use This Review Prompt
+Use the Lark MCP tools to create and populate the spreadsheet directly. No Python or Excel required.
+
+### Option A: Write into an Existing Lark Spreadsheet
+
+#### 1. Get the spreadsheet token from the URL
 ```
-Review the test cases I generated for [FEATURE].
-
-Existing test cases I've made (for reference):
-[PASTE_YOUR_EXISTING_TEST_CASES]
-
-Please:
-1. Identify gaps compared to my existing format
-2. Suggest edge cases I missed
-3. Improve coverage for E2E flows
-4. Add design validation test cases
-5. Include user behavior tests (scroll, swipe, back button)
+URL format: https://COMPANY.larksuite.com/sheets/{spreadsheet_token}
+Example:    https://traveloka.sg.larksuite.com/sheets/shtcnXXXXXXXX
+Token:      shtcnXXXXXXXX
 ```
+
+#### 2. Query the sheet to get the sheet_id
+```
+lark_sheets_v3_spreadsheetSheet_query
+  spreadsheet_token: "shtcnXXXXXXXX"
+```
+
+#### 3. Write the header row and test case rows
+Use `lark_sheets_v3_spreadsheetSheet_replace` to populate content, or use the Lark Sheets values API via the available MCP tools.
 
 ---
 
-## Example: Generate Promotional Section Test Cases
+### Option B: Create a New Lark Spreadsheet
 
-### Prompt
+#### 1. Create the spreadsheet
 ```
-As a senior QA engineer, generate comprehensive test cases for "Promotional Section" feature:
-
-PRD Summary:
-- Horizontal scrollable section at top for isPromotional=TRUE tickets
-- Shows: Product Name (2 lines), Strikethrough Price, Final Price, Discount %, Select CTA
-- Pax selection pop-up aligned to card
-- "Choose Other Dates" CTA when unavailable for selected date
-
-Format: Section | Case | Title | Precondition | Steps | Expected Result
-
-Include: Logic, UI Behavior, User Interaction, State Management, E2E Flow, Edge Cases, Design Validation
+lark_sheets_v3_spreadsheet_create
+  title: "Test Cases - {$productName}"
+  folder_token: "fldXXXXXXXX"   (optional: target folder)
 ```
 
-### Output Example
+Response gives you:
+- `spreadsheet_token` — use this for all subsequent operations
+- `url` — share this link as `{$spreadsheetLink}`
+
+#### 2. Query the default sheet_id
 ```
-| Promotional Items | Logic | Promotional section displayed when isPromotional=TRUE tickets exist | 1. PDP loaded for attraction with ≥1 ticket tagged isPromotional=TRUE<br>2. Content config has Promotion Title, Subtitle, Background Image set | 1. Load PDP<br>2. Scroll to Ticket List section | Promotional Section displayed at top, shows correct Promotion Title, Subtitle, Background Image |
-```
-
----
-
-## Step 6: Export to Excel (.xlsx)
-
-### Python Script (Optional)
-```python
-import xlsxwriter
-
-workbook = xlsxwriter.Workbook('TestCases.xlsx')
-worksheet = workbook.add_worksheet('Test Cases')
-
-# Define formats
-header_format = workbook.add_format({'bold': True, 'bg_color': '#4472C4', 'font_color': 'white'})
-
-# Write headers and data...
-# (Refer to generate_testcases.py for full script)
-
-workbook.close()
+lark_sheets_v3_spreadsheetSheet_query
+  spreadsheet_token: "<from step 1>"
 ```
 
-### Prompt for AI to Generate Excel
+#### 3. Write header row via Lark Sheets API
 ```
-Generate Python script to create .xlsx file with test cases.
+Endpoint: PUT /sheets/v2/spreadsheets/{spreadsheetToken}/values
+Range:    Sheet1!A1:J1
+Values:   ["Test Case Id", "Title", "Section", "Automation Type", "Estimate",
+           "Priority", "Preconditions", "Steps (Text)", "Expected Result", "Type"]
+```
 
-Columns: Section | Case | Title | Precondition | Steps | Expected Result
-
-Test cases:
-[PASTE_YOUR_TEST_CASES]
-
-Requirements:
-- Header row with blue background
-- Text wrap enabled for all cells
-- Column widths: A=25, B=20, C=50, D=60, E=60
+#### 4. Write test case rows in batch
+```
+Endpoint: PUT /sheets/v2/spreadsheets/{spreadsheetToken}/values_append
+Range:    Sheet1!A2
+Values:   [
+  ["TC-001", "Title here", "Section", "Manual", 5, "High", "Preconditions", "1. Step one\n2. Step two", "Expected result", "Positive"],
+  ["TC-002", "Title here", "Section", "Manual", 5, "Medium", "Preconditions", "1. Step one\n2. Step two", "Expected result", "Negative"],
+  ...
+]
 ```
 
 ---
 
-## Step 7: Update TestRail (Optional)
+### How AI Agent Should Execute Step 4
+
+1. Call `lark_sheets_v3_spreadsheet_create` with the product name as the title
+2. Extract `spreadsheet_token` from the response
+3. Call `lark_sheets_v3_spreadsheetSheet_query` to get the default `sheet_id`
+4. Write the 10-column header row to range `A1:J1`
+5. Write all generated test case rows starting from `A2` in batch
+6. Return the spreadsheet URL to the user
+
+---
+
+## Step 5: Update TestRail (Optional)
 
 ### Add Test Cases to TestRail
 ```bash
@@ -195,17 +343,12 @@ curl -X POST -u "user:key" \
 
 ---
 
-## Test Case Categorization (Use "Case" Column)
+## Test Case Type Reference
 
-| Category | Description | Examples |
-|----------|-------------|----------|
-| Logic | Core functionality, happy path | "Section displayed", "Button click works" |
-| UI Behavior | Design validation, visual elements | "Font size matches Figma", "Image aspect ratio" |
-| User Interaction | User actions, gestures | "Click CTA", "Scroll horizontal", "Swipe left/right" |
-| State Management | Data persistence, reset | "Maintain state after close", "Reset after booking" |
-| E2E Flow | Complete user journey | "From select to booking confirmation" |
-| Edge Cases | Boundary conditions, rare scenarios | "0 items", "Sold out", "Special characters" |
-| Localization | Multi-language support | "Bahasa Indonesia locale", "Thai characters" |
-| Error Handling | API errors, network issues | "500 error", "Network timeout" |
-| Responsive | Different screen sizes | "Mobile viewport", "1024px width" |
-| Design Validation | Figma spec compliance | "Matches Figma", "Color #007AFF" |
+| Type | Description | Examples |
+|------|-------------|----------|
+| Positive | Valid inputs, happy path scenarios | "User selects ticket and proceeds", "Button click navigates correctly" |
+| Negative | Invalid inputs, error scenarios | "Submit empty form", "Enter text in number field" |
+| Edge | Boundary values, rare/extreme states | "0 tickets available", "999 max quantity", "Special characters in name" |
+| Security | Auth, access control, injection | "Unauthenticated access blocked", "SQL injection in search field" |
+| Performance | Speed, load, responsiveness | "Loads within 2s", "Handles 100+ items without lag" |

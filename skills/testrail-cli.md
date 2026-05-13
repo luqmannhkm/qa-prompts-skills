@@ -14,19 +14,81 @@ git clone https://github.com/luqmannhkm/testrail-cli.git
 cd testrail-cli
 ```
 
-### 2. Configure credentials
+### 2. Configure credentials via `.env`
+
+The script automatically loads a `.env` file from the same directory as `testrail.sh`. You do **not** need to export variables manually.
+
+#### Option A: Copy from the example template
 ```bash
-cp .env.example .env
-# Edit .env with your credentials:
-# TESTRAIL_URL=https://your-company.testrail.net
-# TESTRAIL_USERNAME=your_email@company.com
-# TESTRAIL_API_KEY=your_api_key
+cp ~/testrail-cli/.env.example ~/testrail-cli/.env
 ```
+
+Then open and fill in your credentials:
+```bash
+nano ~/testrail-cli/.env
+```
+
+#### Option B: Create `.env` directly
+```bash
+cat > ~/testrail-cli/.env << EOF
+TESTRAIL_URL=https://your-company.testrail.net
+TESTRAIL_USERNAME=your_email@company.com
+TESTRAIL_API_KEY=your_api_key_here
+EOF
+```
+
+#### `.env` file format
+```env
+TESTRAIL_URL=https://traveloka.testrail.net
+TESTRAIL_USERNAME=your_email@traveloka.com
+TESTRAIL_API_KEY=your_api_key_here
+```
+
+> **How to get your API key:**
+> 1. Log in to your TestRail instance
+> 2. Go to **My Settings** (top-right avatar menu)
+> 3. Click the **API Keys** tab
+> 4. Click **Add Key** → copy the generated key
 
 ### 3. Load the script
 ```bash
-source testrail.sh
+source ~/testrail-cli/testrail.sh
 ```
+
+When loaded successfully, you will see:
+```
+Loaded credentials from /Users/your-name/testrail-cli/.env
+TestRail CLI helper loaded. Available commands:
+  getSuites <project_id>
+  getSections <project_id> <suite_id>
+  ...
+```
+
+If `.env` is missing, you will see a warning:
+```
+Warning: No .env file found at /Users/your-name/testrail-cli/.env
+Create one with: TESTRAIL_URL, TESTRAIL_USERNAME, TESTRAIL_API_KEY
+```
+
+### How `.env` Auto-Loading Works
+
+The `testrail.sh` script detects its own directory using `BASH_SOURCE[0]` and automatically sources the `.env` file at startup:
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a        # auto-export all variables
+  source "$ENV_FILE"
+  set +a
+fi
+```
+
+This means:
+- `.env` must be in the **same folder** as `testrail.sh` (i.e. `~/testrail-cli/`)
+- Variables in `.env` take priority; script falls back to hardcoded defaults if not set
+- You never need to manually `export` credentials before sourcing the script
 
 ---
 
@@ -204,8 +266,10 @@ curl -X POST -u "$TESTRAIL_USERNAME:$TESTRAIL_API_KEY" \
 
 | Issue | Solution |
 |-------|----------|
-| `command not found` | Run `source testrail.sh` first |
-| 401 Unauthorized | Check .env file has correct API key |
+| `command not found` | Run `source ~/testrail-cli/testrail.sh` first |
+| `Warning: No .env file found` | Create `~/testrail-cli/.env` — see Setup Step 2 above |
+| 401 Unauthorized | Check `TESTRAIL_API_KEY` in `.env` is correct and active |
+| Credentials not loading | Ensure `.env` is in the **same folder** as `testrail.sh` |
 | 404 Not Found | Verify project_id, suite_id, section_id exist |
 | Empty response | Section might have no test cases |
 | `jq: command not found` | Install jq: `brew install jq` (macOS) |
