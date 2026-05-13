@@ -4,7 +4,13 @@
 Use the `testrail.sh` script (from testrail-cli repo) to interact with TestRail API from command line or AI agent.
 
 ## Repository
-URL: https://github.com/luqmannhkm/testrail-cli
+
+The script is maintained in the `scripts/` folder of the QA skills repo:
+```
+https://github.com/luqmannhkm/qa-prompts-skills/blob/main/scripts/testrail.sh
+```
+
+Local path after cloning: `~/testrail-cli/testrail.sh`
 
 ## Quick Setup
 
@@ -101,13 +107,15 @@ getSuites 7
 ```
 
 ### `getSections <project_id> <suite_id>`
-Get all sections in a project and suite.
+Get **all** sections in a project and suite. Auto-paginates — fetches all pages regardless of total count.
 ```bash
 getSections 7 2751
 ```
 
+> **Pagination note:** The TestRail API returns a maximum of 250 sections per page. For large suites (e.g. suite 7 has 287 sections), `getSections` automatically fetches all pages and merges them. You always get the complete list in one call.
+
 ### `getCases <project_id> <suite_id> [section_id]`
-Get test cases. Optional section_id to filter.
+Get test cases. Auto-paginates. Optional section_id to filter.
 ```bash
 # All cases in suite
 getCases 7 2751
@@ -115,6 +123,8 @@ getCases 7 2751
 # Cases in specific section
 getCases 7 2751 86977
 ```
+
+> **Pagination note:** Returns up to 250 cases per page. `getCases` auto-fetches all pages and merges them into a single `{"cases": [...]}` response.
 
 ### `getResults <run_id>`
 Get test results for a test run.
@@ -268,11 +278,13 @@ curl -X POST -u "$TESTRAIL_USERNAME:$TESTRAIL_API_KEY" \
 |-------|----------|
 | `command not found` | Run `source ~/testrail-cli/testrail.sh` first |
 | `Warning: No .env file found` | Create `~/testrail-cli/.env` — see Setup Step 2 above |
+| Warning points to wrong path (e.g. `~/.env`) | This happens when sourced in zsh — `BASH_SOURCE[0]` resolves differently. Set credentials as env vars or fix `SCRIPT_DIR` for zsh with `${(%):-%x}` |
 | 401 Unauthorized | Check `TESTRAIL_API_KEY` in `.env` is correct and active |
 | Credentials not loading | Ensure `.env` is in the **same folder** as `testrail.sh` |
 | 404 Not Found | Verify project_id, suite_id, section_id exist |
 | Empty response | Section might have no test cases |
 | `jq: command not found` | Install jq: `brew install jq` (macOS) |
+| Sections count seems low | Suites with >250 sections span multiple API pages. `getSections` handles this automatically — if you see too few sections, ensure you are using the latest `testrail.sh` from the repo |
 
 ---
 

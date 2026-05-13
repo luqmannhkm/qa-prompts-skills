@@ -116,7 +116,7 @@ The AI agent will fetch and analyze all listed links before generating test case
 4. **Determine platform** — Mobile, Website, or both
 5. **Generate test cases** — per feature/module, covering all 5 types (Positive, Negative, Edge, Security, Performance)
 6. **Apply defaults** — TC-001 IDs, Manual type, 5 min estimate, sections grouped by feature
-7. **Export to Lark Spreadsheet** — create or write into `{$spreadsheetLink}` using `lark_sheets_v3_spreadsheet_create` and Lark Sheets MCP tools
+7. **Export to Lark** — use `lark_docx_builtin_import` to create a Lark Doc (markdown table format), or `lark_bitable_v1_appTableRecord_batchCreate` for a Bitable table. **Do not use Lark Sheets** — the MCP has no write-values tool.
 
 ---
 
@@ -259,78 +259,70 @@ Review existing test cases and identify:
 
 ---
 
-## Step 4: Export to Lark Spreadsheet
+## Step 4: Export to Lark
 
-Use the Lark MCP tools to create and populate the spreadsheet directly. No Python or Excel required.
+The Lark Sheets MCP does **not** have a write-values tool — only query, find, and replace are available. Use one of the two options below instead.
 
-### Option A: Write into an Existing Lark Spreadsheet
+### Option A: Lark Doc (Recommended)
 
-#### 1. Get the spreadsheet token from the URL
+Use `lark_docx_builtin_import` to create a new Lark Doc containing all test cases formatted as a markdown table. This is the fastest and most reliable method.
+
+#### Format the test cases as a markdown table, then call:
 ```
-URL format: https://COMPANY.larksuite.com/sheets/{spreadsheet_token}
-Example:    https://traveloka.sg.larksuite.com/sheets/shtcnXXXXXXXX
-Token:      shtcnXXXXXXXX
-```
-
-#### 2. Query the sheet to get the sheet_id
-```
-lark_sheets_v3_spreadsheetSheet_query
-  spreadsheet_token: "shtcnXXXXXXXX"
+lark_docx_builtin_import
+  file_name: "Test Cases - {$productName}"
+  markdown: "<full markdown table with all TC rows>"
 ```
 
-#### 3. Write the header row and test case rows
-Use `lark_sheets_v3_spreadsheetSheet_replace` to populate content, or use the Lark Sheets values API via the available MCP tools.
+Response gives you a URL to the created Lark Doc. Share that URL as the output.
+
+> **False-negative warning:** `lark_docx_builtin_import` may return a `Streamable HTTP error` even when the document was created successfully. Always check Lark directly for the created doc before retrying. A retry will create a duplicate.
+
+#### Markdown table format
+```markdown
+| Test Case Id | Title | Section | Automation Type | Estimate | Priority | Preconditions | Steps (Text) | Expected Result | Type |
+|---|---|---|---|---|---|---|---|---|---|
+| TC-001 | Verify X displays correctly | Feature Name | Manual | 5 | High | 1. User is on page | 1. Open page\n2. Observe | Feature renders correctly | Positive |
+| TC-002 | Verify error shown on invalid input | Feature Name | Manual | 5 | Medium | 1. User is on page | 1. Enter invalid data\n2. Submit | Error message displayed | Negative |
+```
 
 ---
 
-### Option B: Create a New Lark Spreadsheet
+### Option B: Lark Bitable (Multi-Dimensional Table)
 
-#### 1. Create the spreadsheet
-```
-lark_sheets_v3_spreadsheet_create
-  title: "Test Cases - {$productName}"
-  folder_token: "fldXXXXXXXX"   (optional: target folder)
-```
+Use `lark_bitable_v1_appTableRecord_batchCreate` to write rows directly into a Bitable table. Best when structured/filterable data is required.
 
-Response gives you:
-- `spreadsheet_token` — use this for all subsequent operations
-- `url` — share this link as `{$spreadsheetLink}`
-
-#### 2. Query the default sheet_id
+#### 1. Create or locate the Bitable app
 ```
-lark_sheets_v3_spreadsheetSheet_query
-  spreadsheet_token: "<from step 1>"
+lark_bitable_v1_app_create
+  name: "Test Cases - {$productName}"
 ```
 
-#### 3. Write header row via Lark Sheets API
+#### 2. Get the table_id
 ```
-Endpoint: PUT /sheets/v2/spreadsheets/{spreadsheetToken}/values
-Range:    Sheet1!A1:J1
-Values:   ["Test Case Id", "Title", "Section", "Automation Type", "Estimate",
-           "Priority", "Preconditions", "Steps (Text)", "Expected Result", "Type"]
+lark_bitable_v1_appTable_list
+  app_token: "<app_token from step 1>"
 ```
 
-#### 4. Write test case rows in batch
+#### 3. Batch create records (up to 500 per call)
 ```
-Endpoint: PUT /sheets/v2/spreadsheets/{spreadsheetToken}/values_append
-Range:    Sheet1!A2
-Values:   [
-  ["TC-001", "Title here", "Section", "Manual", 5, "High", "Preconditions", "1. Step one\n2. Step two", "Expected result", "Positive"],
-  ["TC-002", "Title here", "Section", "Manual", 5, "Medium", "Preconditions", "1. Step one\n2. Step two", "Expected result", "Negative"],
-  ...
-]
+lark_bitable_v1_appTableRecord_batchCreate
+  app_token: "<app_token>"
+  table_id: "<table_id>"
+  records: [
+    { "fields": { "Test Case Id": "TC-001", "Title": "...", "Section": "...", "Automation Type": "Manual", "Estimate": 5, "Priority": "High", "Preconditions": "...", "Steps (Text)": "1. Step\n2. Step", "Expected Result": "...", "Type": "Positive" } },
+    ...
+  ]
 ```
 
 ---
 
 ### How AI Agent Should Execute Step 4
 
-1. Call `lark_sheets_v3_spreadsheet_create` with the product name as the title
-2. Extract `spreadsheet_token` from the response
-3. Call `lark_sheets_v3_spreadsheetSheet_query` to get the default `sheet_id`
-4. Write the 10-column header row to range `A1:J1`
-5. Write all generated test case rows starting from `A2` in batch
-6. Return the spreadsheet URL to the user
+1. Format all generated test cases as a markdown table with the 10 standard columns
+2. Call `lark_docx_builtin_import` with the formatted markdown
+3. If the response returns an error (including `Streamable HTTP error`), **check Lark first** — the doc may already exist
+4. Return the Lark Doc URL to the user
 
 ---
 
