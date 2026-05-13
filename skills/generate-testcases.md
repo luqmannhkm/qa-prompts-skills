@@ -19,8 +19,10 @@ Hello, I am a Software Quality Assurance Engineer currently working on a product
 Based on the Product Requirement Document (PRD) located at {$prdLink}, I want to generate test cases
 covering all possible scenarios derived from the provided PRD.
 
-You can refer to the existing test cases from this TestRail link: {$testrailLink}
-Learn about the pattern, the components that need to be tested, the steps, title format, and expected result style.
+You can refer to the existing test cases from the following TestRail link(s):
+{$testrailLinks}
+
+For each link, learn about the pattern, the components that need to be tested, the steps, title format, and expected result style.
 Also consider which existing test cases are still relevant and should be included or referenced in the newly generated test cases for this feature.
 
 The test cases should include the following types: Positive, Negative, Edge, Security, and Performance.
@@ -51,8 +53,20 @@ Generate all test cases in English.
 |----------|-------------|---------|
 | `{$productName}` | Name of the product or feature being tested | `Traveloka Attractions PDP` |
 | `{$prdLink}` | URL to the PRD document (Lark, Confluence, etc.) | `https://traveloka.sg.larksuite.com/wiki/XXX` |
-| `{$testrailLink}` | TestRail URL of the existing test suite/section to reference | `https://traveloka.testrail.net/index.php?/suites/view/7&group_id=267` |
+| `{$testrailLinks}` | One or more TestRail URLs to reference existing test cases. List each on a new line with a `-` prefix if providing multiple | Single: `https://traveloka.testrail.net/index.php?/suites/view/7&group_id=267` — Multiple: see below |
 | `{$spreadsheetLink}` | URL of the existing Lark Spreadsheet to write into, or leave empty to create a new one | `https://traveloka.sg.larksuite.com/sheets/XXX` |
+
+#### Multiple TestRail Links — Example
+
+When referencing more than one section or suite, replace `{$testrailLinks}` with a bullet list:
+
+```
+- https://traveloka.testrail.net/index.php?/suites/view/7&group_id=267
+- https://traveloka.testrail.net/index.php?/suites/view/7&group_id=312
+- https://traveloka.testrail.net/index.php?/suites/view/7&group_id=450
+```
+
+The AI agent will fetch and analyze all listed links before generating test cases.
 
 ### Coverage Options
 
@@ -97,7 +111,7 @@ Generate all test cases in English.
 ### How AI Should Execute This Prompt
 
 1. **Read PRD** — fetch from `{$prdLink}`, extract features, user stories, acceptance criteria
-2. **Read existing TestRail cases** — fetch from `{$testrailLink}`, learn title patterns, components, step style, expected result format
+2. **Read existing TestRail cases** — fetch from each URL in `{$testrailLinks}`, learn title patterns, components, step style, expected result format
 3. **Identify test scope** — determine which features need Functional / API / Visual coverage
 4. **Determine platform** — Mobile, Website, or both
 5. **Generate test cases** — per feature/module, covering all 5 types (Positive, Negative, Edge, Security, Performance)
